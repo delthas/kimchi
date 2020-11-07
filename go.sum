@@ -1,0 +1,5 @@
+git.sr.ht/~emersion/go-scfg v0.0.0-20201019143924-142a8aa629fc h1:51BD67xFX+bozd3ZRuOUfalrhx4/nQSh6A9lI08rYOk=
+git.sr.ht/~emersion/go-scfg v0.0.0-20201019143924-142a8aa629fc/go.mod h1:t+Ww6SR24yYnXzEWiNlOY0AFo5E9B73X++10lrSpp4U=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 h1:El6M4kTTCOh6aBiKaUGG7oYTSPP8MxqL4YI3kZKwcP4=
+github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
