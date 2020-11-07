@@ -6,6 +6,9 @@ import (
 	"net"
 	"net/http"
 	"sync"
+
+	"github.com/pires/go-proxyproto"
+	"golang.org/x/net/http2"
 )
 
 type Server struct {
@@ -13,6 +16,8 @@ type Server struct {
 
 	http1         *http.Server
 	http1Listener *pipeListener
+
+	http2 *http2.Server
 }
 
 func NewServer() *Server {
@@ -21,6 +26,7 @@ func NewServer() *Server {
 	srv.http1 = &http.Server{
 		Handler: srv,
 	}
+	srv.http2 = &http2.Server{}
 	return srv
 }
 
@@ -82,7 +88,35 @@ func (ln *Listener) serve(netLn net.Listener) error {
 }
 
 func (ln *Listener) serveConn(conn net.Conn) error {
-	return ln.Server.http1Listener.ServeConn(conn)
+	// TODO: only accept PROXY protocol from trusted sources
+	var proto string
+	proxyConn := proxyproto.NewConn(conn)
+	if proxyHeader := proxyConn.ProxyHeader(); proxyHeader != nil {
+		tlvs, err := proxyHeader.TLVs()
+		if err != nil {
+			conn.Close()
+			return err
+		}
+		for _, tlv := range tlvs {
+			if tlv.Type == proxyproto.PP2_TYPE_ALPN {
+				proto = string(tlv.Value)
+			}
+		}
+	}
+	conn = proxyConn
+
+	switch proto {
+	case "h2", "h2c":
+		defer conn.Close()
+		opts := http2.ServeConnOpts{Handler: ln.Server}
+		ln.Server.http2.ServeConn(conn, &opts)
+		return nil
+	case "", "http/1.0", "http/1.1":
+		return ln.Server.http1Listener.ServeConn(conn)
+	default:
+		conn.Close()
+		return fmt.Errorf("unsupported protocol %q", proto)
+	}
 }
 
 var errPipeListenerClosed = fmt.Errorf("pipe listener closed")
