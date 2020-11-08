@@ -18,23 +18,12 @@ type listenerKey struct {
 
 type Server struct {
 	listeners map[listenerKey]*Listener
-
-	http1         *http.Server
-	http1Listener *pipeListener
-
-	http2 *http2.Server
 }
 
 func NewServer() *Server {
-	srv := &Server{
+	return &Server{
 		listeners: make(map[listenerKey]*Listener),
 	}
-	srv.http1Listener = newPipeListener()
-	srv.http1 = &http.Server{
-		Handler: srv,
-	}
-	srv.http2 = &http2.Server{}
-	return srv
 }
 
 func (srv *Server) Start() error {
@@ -43,12 +32,6 @@ func (srv *Server) Start() error {
 			return err
 		}
 	}
-
-	go func() {
-		if err := srv.http1.Serve(srv.http1Listener); err != nil {
-			log.Fatalf("HTTP/1 server: %v", err)
-		}
-	}()
 
 	return nil
 }
@@ -59,21 +42,30 @@ func (srv *Server) AddListener(network, addr string) {
 		return
 	}
 
-	srv.listeners[k] = &Listener{
-		Network: network,
-		Address: addr,
-		Server:  srv,
-	}
-}
-
-func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "yo", 200)
+	srv.listeners[k] = newListener(srv, network, addr)
 }
 
 type Listener struct {
 	Network string
 	Address string
 	Server  *Server
+
+	h1Server   *http.Server
+	h1Listener *pipeListener
+
+	h2Server *http2.Server
+}
+
+func newListener(srv *Server, network, addr string) *Listener {
+	ln := &Listener{
+		Network: network,
+		Address: addr,
+		Server:  srv,
+	}
+	ln.h1Listener = newPipeListener()
+	ln.h1Server = &http.Server{Handler: ln}
+	ln.h2Server = &http2.Server{}
+	return ln
 }
 
 func (ln *Listener) Start() error {
@@ -86,6 +78,12 @@ func (ln *Listener) Start() error {
 	go func() {
 		if err := ln.serve(netLn); err != nil {
 			log.Fatalf("failed to serve listener %q: %v", ln.Address, err)
+		}
+	}()
+
+	go func() {
+		if err := ln.h1Server.Serve(ln.h1Listener); err != nil {
+			log.Fatalf("HTTP/1 server: %v", err)
 		}
 	}()
 
@@ -128,15 +126,19 @@ func (ln *Listener) serveConn(conn net.Conn) error {
 	switch proto {
 	case "h2", "h2c":
 		defer conn.Close()
-		opts := http2.ServeConnOpts{Handler: ln.Server}
-		ln.Server.http2.ServeConn(conn, &opts)
+		opts := http2.ServeConnOpts{Handler: ln}
+		ln.h2Server.ServeConn(conn, &opts)
 		return nil
 	case "", "http/1.0", "http/1.1":
-		return ln.Server.http1Listener.ServeConn(conn)
+		return ln.h1Listener.ServeConn(conn)
 	default:
 		conn.Close()
 		return fmt.Errorf("unsupported protocol %q", proto)
 	}
+}
+
+func (ln *Listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	http.Error(w, "yo", 200)
 }
 
 var errPipeListenerClosed = fmt.Errorf("pipe listener closed")
