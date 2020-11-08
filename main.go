@@ -19,10 +19,8 @@ func main() {
 	}
 
 	srv := NewServer()
-	for _, dir := range cfg {
-		if err := parseSite(srv, dir); err != nil {
-			log.Fatal(err)
-		}
+	if err := parseConfig(srv, cfg); err != nil {
+		log.Fatal(err)
 	}
 
 	if err := srv.Start(); err != nil {
