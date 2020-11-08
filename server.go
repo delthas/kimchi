@@ -11,8 +11,13 @@ import (
 	"golang.org/x/net/http2"
 )
 
+type listenerKey struct {
+	network string
+	address string
+}
+
 type Server struct {
-	Listeners []*Listener
+	listeners map[listenerKey]*Listener
 
 	http1         *http.Server
 	http1Listener *pipeListener
@@ -21,7 +26,9 @@ type Server struct {
 }
 
 func NewServer() *Server {
-	srv := &Server{}
+	srv := &Server{
+		listeners: make(map[listenerKey]*Listener),
+	}
 	srv.http1Listener = newPipeListener()
 	srv.http1 = &http.Server{
 		Handler: srv,
@@ -31,7 +38,7 @@ func NewServer() *Server {
 }
 
 func (srv *Server) Start() error {
-	for _, ln := range srv.Listeners {
+	for _, ln := range srv.listeners {
 		if err := ln.Start(); err != nil {
 			return err
 		}
@@ -44,6 +51,19 @@ func (srv *Server) Start() error {
 	}()
 
 	return nil
+}
+
+func (srv *Server) AddListener(network, addr string) {
+	k := listenerKey{network, addr}
+	if _, ok := srv.listeners[k]; ok {
+		return
+	}
+
+	srv.listeners[k] = &Listener{
+		Network: network,
+		Address: addr,
+		Server:  srv,
+	}
 }
 
 func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

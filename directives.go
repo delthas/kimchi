@@ -6,11 +6,7 @@ import (
 
 func parseSite(srv *Server, dir *scfg.Directive) error {
 	for _, addr := range dir.Params {
-		srv.Listeners = append(srv.Listeners, &Listener{
-			Network: "tcp",
-			Address: addr,
-			Server:  srv,
-		})
+		srv.AddListener("tcp", addr)
 	}
 	return nil
 }
