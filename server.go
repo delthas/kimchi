@@ -36,18 +36,21 @@ func (srv *Server) Start() error {
 	return nil
 }
 
-func (srv *Server) AddListener(network, addr string) {
+func (srv *Server) AddListener(network, addr string) *Listener {
 	k := listenerKey{network, addr}
-	if _, ok := srv.listeners[k]; ok {
-		return
+	if ln, ok := srv.listeners[k]; ok {
+		return ln
 	}
 
-	srv.listeners[k] = newListener(srv, network, addr)
+	ln := newListener(srv, network, addr)
+	srv.listeners[k] = ln
+	return ln
 }
 
 type Listener struct {
 	Network string
 	Address string
+	Mux     *http.ServeMux
 	Server  *Server
 
 	h1Server   *http.Server
@@ -65,6 +68,7 @@ func newListener(srv *Server, network, addr string) *Listener {
 	ln.h1Listener = newPipeListener()
 	ln.h1Server = &http.Server{Handler: ln}
 	ln.h2Server = &http2.Server{}
+	ln.Mux = http.NewServeMux()
 	return ln
 }
 
@@ -138,7 +142,7 @@ func (ln *Listener) serveConn(conn net.Conn) error {
 }
 
 func (ln *Listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "yo", 200)
+	ln.Mux.ServeHTTP(w, r)
 }
 
 var errPipeListenerClosed = fmt.Errorf("pipe listener closed")
