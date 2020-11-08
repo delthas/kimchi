@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -8,8 +10,24 @@ import (
 	"sync"
 
 	"github.com/pires/go-proxyproto"
+	"github.com/pires/go-proxyproto/tlvparse"
 	"golang.org/x/net/http2"
 )
+
+type contextKey string
+
+const (
+	contextKeyProtocol contextKey = "protocol"
+	contextKeyTLSState contextKey = "tlsState"
+)
+
+func contextProtocol(ctx context.Context) string {
+	return ctx.Value(contextKeyProtocol).(string)
+}
+
+func contextTLSState(ctx context.Context) *tls.ConnectionState {
+	return ctx.Value(contextKeyTLSState).(*tls.ConnectionState)
+}
 
 type listenerKey struct {
 	network string
@@ -48,10 +66,11 @@ func (srv *Server) AddListener(network, addr string) *Listener {
 }
 
 type Listener struct {
-	Network string
-	Address string
-	Mux     *http.ServeMux
-	Server  *Server
+	Network  string
+	Address  string
+	Mux      *http.ServeMux
+	Insecure bool
+	Server   *Server
 
 	h1Server   *http.Server
 	h1Listener *pipeListener
@@ -66,7 +85,12 @@ func newListener(srv *Server, network, addr string) *Listener {
 		Server:  srv,
 	}
 	ln.h1Listener = newPipeListener()
-	ln.h1Server = &http.Server{Handler: ln}
+	ln.h1Server = &http.Server{
+		Handler: ln,
+		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+			return conn.(*Conn).Context(ctx)
+		},
+	}
 	ln.h2Server = &http2.Server{}
 	ln.Mux = http.NewServeMux()
 	return ln
@@ -110,8 +134,11 @@ func (ln *Listener) serve(netLn net.Listener) error {
 }
 
 func (ln *Listener) serveConn(conn net.Conn) error {
-	// TODO: only accept PROXY protocol from trusted sources
 	var proto string
+	var tlsState *tls.ConnectionState
+	// TODO: read proto and TLS state from conn, if it's a TLS connection
+
+	// TODO: only accept PROXY protocol from trusted sources
 	proxyConn := proxyproto.NewConn(conn)
 	if proxyHeader := proxyConn.ProxyHeader(); proxyHeader != nil {
 		tlvs, err := proxyHeader.TLVs()
@@ -120,17 +147,29 @@ func (ln *Listener) serveConn(conn net.Conn) error {
 			return err
 		}
 		for _, tlv := range tlvs {
-			if tlv.Type == proxyproto.PP2_TYPE_ALPN {
+			switch tlv.Type {
+			case proxyproto.PP2_TYPE_ALPN:
 				proto = string(tlv.Value)
+			case proxyproto.PP2_TYPE_SSL:
+				tlsState = parseSSLTLV(tlv)
 			}
 		}
 	}
 	conn = proxyConn
 
+	conn = &Conn{
+		Conn:     conn,
+		proto:    proto,
+		tlsState: tlsState,
+	}
+
 	switch proto {
 	case "h2", "h2c":
 		defer conn.Close()
-		opts := http2.ServeConnOpts{Handler: ln}
+		opts := http2.ServeConnOpts{
+			Context: conn.(*Conn).Context(context.Background()),
+			Handler: ln,
+		}
 		ln.h2Server.ServeConn(conn, &opts)
 		return nil
 	case "", "http/1.0", "http/1.1":
@@ -142,7 +181,40 @@ func (ln *Listener) serveConn(conn net.Conn) error {
 }
 
 func (ln *Listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	r.TLS = contextTLSState(r.Context())
+
+	if r.TLS == nil && !ln.Insecure {
+		http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusMovedPermanently)
+		return
+	}
+
 	ln.Mux.ServeHTTP(w, r)
+}
+
+func parseSSLTLV(tlv proxyproto.TLV) *tls.ConnectionState {
+	ssl, err := tlvparse.SSL(tlv)
+	if err != nil {
+		log.Printf("failed to parse PROXY SSL TLV: %v", err)
+		return nil
+	}
+	if !ssl.ClientSSL() {
+		return nil
+	}
+	// TODO: parse PP2_SUBTYPE_SSL_VERSION, PP2_SUBTYPE_SSL_CIPHER,
+	// PP2_SUBTYPE_SSL_SIG_ALG, PP2_SUBTYPE_SSL_KEY_ALG
+	return &tls.ConnectionState{}
+}
+
+type Conn struct {
+	net.Conn
+	proto    string
+	tlsState *tls.ConnectionState
+}
+
+func (c *Conn) Context(ctx context.Context) context.Context {
+	ctx = context.WithValue(ctx, contextKeyProtocol, c.proto)
+	ctx = context.WithValue(ctx, contextKeyTLSState, c.tlsState)
+	return ctx
 }
 
 var errPipeListenerClosed = fmt.Errorf("pipe listener closed")

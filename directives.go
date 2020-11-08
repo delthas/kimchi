@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 
 	"git.sr.ht/~emersion/go-scfg"
 )
@@ -24,8 +26,32 @@ func parseConfig(srv *Server, cfg scfg.Block) error {
 }
 
 func parseSite(srv *Server, dir *scfg.Directive) error {
-	for _, addr := range dir.Params {
-		ln := srv.AddListener("tcp", addr)
+	for _, uriStr := range dir.Params {
+		if !strings.Contains(uriStr, "//") {
+			uriStr = "//" + uriStr
+		}
+
+		u, err := url.Parse(uriStr)
+		if err != nil {
+			return err
+		}
+
+		var ln *Listener
+		switch u.Scheme {
+		case "http", "":
+			if _, _, err := net.SplitHostPort(u.Host); err != nil {
+				u.Host += ":http"
+			}
+			ln = srv.AddListener("tcp", u.Host)
+		case "http+insecure":
+			if _, _, err := net.SplitHostPort(u.Host); err != nil {
+				u.Host += ":http"
+			}
+			ln = srv.AddListener("tcp", u.Host)
+			ln.Insecure = true
+		default:
+			return fmt.Errorf("unknown URI scheme %q", u.Scheme)
+		}
 
 		for _, child := range dir.Children {
 			switch child.Name {
