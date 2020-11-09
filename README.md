@@ -1,4 +1,4 @@
-# kimchi
+# [kimchi]
 
 A bare-bones HTTP server. Designed to be used together with [tlstunnel].
 
@@ -16,4 +16,5 @@ site example.com {
 
 MIT
 
+[kimchi]: https://sr.ht/~emersion/kimchi
 [tlstunnel]: https://sr.ht/~emersion/tlstunnel
