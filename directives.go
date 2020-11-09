@@ -52,6 +52,16 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 			return fmt.Errorf("unknown URI scheme %q", u.Scheme)
 		}
 
+		path := u.Path
+		if path == "" {
+			path = "/"
+		}
+		if !strings.HasPrefix(path, "/") {
+			return fmt.Errorf("invalid path %q", path)
+		}
+
+		pattern := host+path
+
 		for _, child := range dir.Children {
 			switch child.Name {
 			case "root":
@@ -59,7 +69,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 				if err := child.ParseParams(&dir); err != nil {
 					return err
 				}
-				ln.Mux.Handle(host+"/", http.FileServer(http.Dir(dir)))
+				ln.Mux.Handle(pattern, http.FileServer(http.Dir(dir)))
 			case "reverse_proxy":
 				var urlStr string
 				if err := child.ParseParams(&urlStr); err != nil {
@@ -75,7 +85,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 					director(req)
 					req.Host = target.Host
 				}
-				ln.Mux.Handle(host+"/", proxy)
+				ln.Mux.Handle(pattern, proxy)
 			default:
 				return fmt.Errorf("unknown directive %q", child.Name)
 			}
