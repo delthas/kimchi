@@ -47,7 +47,20 @@ The following directives are supported:
 	- _http+insecure://[host][:port][/path]_ sets up an HTTP listener without
 	  HTTPS redirection.
 
-	If the port isn't specified, the default HTTP port (80) is assumed.
+	If the host is omitted, requests for all hosts will be handled. If the port
+	is omitted, the default HTTP port (80) is assumed. If the path is omitted,
+	requests for all paths will be handled.
+
+	URI examples:
+
+	- _:8080_ listens on port 8080
+	- _example.org_ listens on port 80 and handles requests for host
+	  "example.org"
+	- _http+insecure://localhost_ listens on port 80 without redirecting to
+	  HTTPS
+	- _example.org/foo/_ listens on port 80 and handles requests for host
+	  "example.org" and path begining with "/foo/"
+	- _http://_ listens on port 80
 
 	The site directive supports the following sub-directives:
 
