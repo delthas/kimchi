@@ -37,18 +37,17 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 		}
 
 		var ln *Listener
+		var host, port string
 		switch u.Scheme {
-		case "http", "":
-			if _, _, err := net.SplitHostPort(u.Host); err != nil {
-				u.Host += ":http"
+		case "", "http", "http+insecure":
+			if host, port, err = net.SplitHostPort(u.Host); err != nil {
+				host = u.Host
+				port = ":http"
 			}
-			ln = srv.AddListener("tcp", u.Host)
-		case "http+insecure":
-			if _, _, err := net.SplitHostPort(u.Host); err != nil {
-				u.Host += ":http"
+			ln = srv.AddListener("tcp", ":"+port)
+			if u.Scheme == "http+insecure" {
+				ln.Insecure = true
 			}
-			ln = srv.AddListener("tcp", u.Host)
-			ln.Insecure = true
 		default:
 			return fmt.Errorf("unknown URI scheme %q", u.Scheme)
 		}
@@ -60,7 +59,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 				if err := child.ParseParams(&dir); err != nil {
 					return err
 				}
-				ln.Mux.Handle("/", http.FileServer(http.Dir(dir)))
+				ln.Mux.Handle(host+"/", http.FileServer(http.Dir(dir)))
 			case "reverse_proxy":
 				var urlStr string
 				if err := child.ParseParams(&urlStr); err != nil {
@@ -76,7 +75,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 					director(req)
 					req.Host = target.Host
 				}
-				ln.Mux.Handle("/", proxy)
+				ln.Mux.Handle(host+"/", proxy)
 			default:
 				return fmt.Errorf("unknown directive %q", child.Name)
 			}
