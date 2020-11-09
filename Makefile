@@ -6,11 +6,15 @@ RM = rm
 GOFLAGS =
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
+SYSCONFDIR = /etc
+
+goflags = $(GOFLAGS) \
+	-ldflags="-X 'main.configPath=$(SYSCONFDIR)/kimchi/config'"
 
 all: kimchi
 
 kimchi:
-	$(GO) build $(GOFLAGS) .
+	$(GO) build $(goflags) .
 
 clean:
 	$(RM) -f kimchi
