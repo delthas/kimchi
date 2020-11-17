@@ -42,7 +42,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 		case "", "http", "http+insecure":
 			if host, port, err = net.SplitHostPort(u.Host); err != nil {
 				host = u.Host
-				port = ":http"
+				port = "http"
 			}
 			ln = srv.AddListener("tcp", ":"+port)
 			if u.Scheme == "http+insecure" {
