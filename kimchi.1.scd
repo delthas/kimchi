@@ -77,6 +77,9 @@ The following directives are supported:
 }
 		Set an HTTP header field.
 
+	*basic_auth* <username> <password>
+		Sets up HTTP basic authentication.
+
 # FILES
 
 _/etc/kimchi/config_

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"fmt"
 	"net"
 	"net/http"
@@ -60,7 +61,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 			return fmt.Errorf("invalid path %q", path)
 		}
 
-		pattern := host+path
+		pattern := host + path
 
 		// First process handler directives
 		var handler http.Handler
@@ -145,6 +146,24 @@ func parseMiddleware(dir *scfg.Directive, next http.Handler) (http.Handler, erro
 			for k, v := range setFields {
 				w.Header().Set(k, v)
 			}
+			next.ServeHTTP(w, r)
+		}), nil
+	case "basic_auth":
+		var username, password string
+		if err := dir.ParseParams(&username, &password); err != nil {
+			return nil, err
+		}
+
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, p, ok := r.BasicAuth()
+			usernameOK := subtle.ConstantTimeCompare([]byte(username), []byte(u))
+			passwordOK := subtle.ConstantTimeCompare([]byte(password), []byte(p))
+			if !ok || (usernameOK&passwordOK) != 1 {
+				w.Header().Set("WWW-Authenticate", "Basic")
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
 			next.ServeHTTP(w, r)
 		}), nil
 	default:
