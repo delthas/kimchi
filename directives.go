@@ -62,14 +62,17 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 
 		pattern := host+path
 
+		// First process handler directives
+		var handler http.Handler
 		for _, child := range dir.Children {
+			var h http.Handler
 			switch child.Name {
 			case "root":
 				var dir string
 				if err := child.ParseParams(&dir); err != nil {
 					return err
 				}
-				ln.Mux.Handle(pattern, http.FileServer(http.Dir(dir)))
+				h = http.FileServer(http.Dir(dir))
 			case "reverse_proxy":
 				var urlStr string
 				if err := child.ParseParams(&urlStr); err != nil {
@@ -85,11 +88,66 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 					director(req)
 					req.Host = target.Host
 				}
-				ln.Mux.Handle(pattern, proxy)
-			default:
-				return fmt.Errorf("unknown directive %q", child.Name)
+				h = proxy
+			}
+			if h != nil {
+				if handler != nil {
+					return fmt.Errorf("multiple HTTP handler directives provided")
+				}
+				handler = h
 			}
 		}
+		if handler == nil {
+			return fmt.Errorf("missing handler directive")
+		}
+
+		// Then process middleware directives
+		for _, child := range dir.Children {
+			switch child.Name {
+			case "root", "reverse_proxy":
+				// Handler directive already processed above
+			default:
+				handler, err = parseMiddleware(child, handler)
+				if err != nil {
+					return fmt.Errorf("directive %q: %v", child.Name, err)
+				}
+			}
+		}
+
+		ln.Mux.Handle(pattern, handler)
 	}
 	return nil
+}
+
+func parseMiddleware(dir *scfg.Directive, next http.Handler) (http.Handler, error) {
+	switch dir.Name {
+	case "header":
+		// TODO: allow adding and removing fields
+		setFields := make(map[string]string)
+		if len(dir.Params) > 0 {
+			if len(dir.Params) != 2 {
+				return nil, fmt.Errorf("expected exactly two parameters")
+			}
+			setFields[dir.Params[0]] = dir.Params[1]
+		} else {
+			for _, child := range dir.Children {
+				if len(child.Params) != 1 {
+					return nil, fmt.Errorf("expected exactly one parameter for child directive")
+				}
+				if _, ok := setFields[child.Name]; ok {
+					return nil, fmt.Errorf("duplicate child directive %q", child.Name)
+				}
+				setFields[child.Name] = child.Params[0]
+			}
+		}
+
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			for k, v := range setFields {
+				w.Header().Set(k, v)
+			}
+			next.ServeHTTP(w, r)
+		}), nil
+	default:
+		return nil, fmt.Errorf("unknown directive")
+	}
 }

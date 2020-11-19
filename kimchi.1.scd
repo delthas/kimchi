@@ -70,6 +70,13 @@ The following directives are supported:
 	*root* <path>
 		Serve static files at the specified path.
 
+	*header* <key> <value> ++
+*header* { ++
+	<key> <value> ++
+	... ++
+}
+		Set an HTTP header field.
+
 # FILES
 
 _/etc/kimchi/config_
