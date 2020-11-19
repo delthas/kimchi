@@ -78,50 +78,33 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 
 		pattern := host + path
 
-		// First process handler directives
-		var handler http.Handler
+		// First process backend directives
+		var backend http.Handler
 		for _, child := range dir.Children {
-			var h http.Handler
-			switch child.Name {
-			case "root":
-				var dir string
-				if err := child.ParseParams(&dir); err != nil {
-					return err
-				}
-				h = http.FileServer(http.Dir(dir))
-			case "reverse_proxy":
-				var urlStr string
-				if err := child.ParseParams(&urlStr); err != nil {
-					return err
-				}
-				target, err := url.Parse(urlStr)
-				if err != nil {
-					return err
-				}
-				proxy := httputil.NewSingleHostReverseProxy(target)
-				director := proxy.Director
-				proxy.Director = func(req *http.Request) {
-					director(req)
-					req.Host = target.Host
-				}
-				h = proxy
+			f, ok := backends[child.Name]
+			if !ok {
+				continue
 			}
-			if h != nil {
-				if handler != nil {
-					return fmt.Errorf("multiple HTTP handler directives provided")
-				}
-				handler = h
+
+			if backend != nil {
+				return fmt.Errorf("multiple HTTP handler directives provided")
+			}
+
+			backend, err = f(child)
+			if err != nil {
+				return err
 			}
 		}
-		if handler == nil {
+		if backend == nil {
 			return fmt.Errorf("missing handler directive")
 		}
 
 		// Then process middleware directives
+		handler := backend
 		for _, child := range dir.Children {
 			switch child.Name {
 			case "root", "reverse_proxy":
-				// Handler directive already processed above
+				// Backend directive already processed above
 			default:
 				handler, err = parseMiddleware(child, handler)
 				if err != nil {
@@ -133,6 +116,35 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 		ln.Mux.Handle(pattern, handler)
 	}
 	return nil
+}
+
+type parseBackendFunc func(dir *scfg.Directive) (http.Handler, error)
+
+var backends = map[string]parseBackendFunc{
+	"root": func(dir *scfg.Directive) (http.Handler, error) {
+		var dirname string
+		if err := dir.ParseParams(&dirname); err != nil {
+			return nil, err
+		}
+		return http.FileServer(http.Dir(dirname)), nil
+	},
+	"reverse_proxy": func(dir *scfg.Directive) (http.Handler, error) {
+		var urlStr string
+		if err := dir.ParseParams(&urlStr); err != nil {
+			return nil, err
+		}
+		target, err := url.Parse(urlStr)
+		if err != nil {
+			return nil, err
+		}
+		proxy := httputil.NewSingleHostReverseProxy(target)
+		director := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			director(req)
+			req.Host = target.Host
+		}
+		return proxy, nil
+	},
 }
 
 func parseMiddleware(dir *scfg.Directive, next http.Handler) (http.Handler, error) {
