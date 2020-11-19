@@ -67,7 +67,7 @@ The following directives are supported:
 	*reverse_proxy* <uri>
 		Forward incoming requests to another HTTP server.
 
-	*root* <path>
+	*file_server* <path>
 		Serve static files at the specified path.
 
 	*header* <key> <value> ++

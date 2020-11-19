@@ -103,7 +103,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 		handler := backend
 		for _, child := range dir.Children {
 			switch child.Name {
-			case "root", "reverse_proxy":
+			case "file_server", "reverse_proxy":
 				// Backend directive already processed above
 			default:
 				handler, err = parseMiddleware(child, handler)
@@ -121,7 +121,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 type parseBackendFunc func(dir *scfg.Directive) (http.Handler, error)
 
 var backends = map[string]parseBackendFunc{
-	"root": func(dir *scfg.Directive) (http.Handler, error) {
+	"file_server": func(dir *scfg.Directive) (http.Handler, error) {
 		var dirname string
 		if err := dir.ParseParams(&dirname); err != nil {
 			return nil, err
