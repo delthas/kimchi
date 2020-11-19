@@ -80,6 +80,16 @@ The following directives are supported:
 	*basic_auth* <username> <password>
 		Sets up HTTP basic authentication.
 
+*import* <pattern>
+	Include external files.
+
+	_pattern_ can be a filename or a glob pattern. Its contents will replace
+	this directive. A glob that doesn't match any file is not an error. Paths
+	are resolved relative to the file the *import* directive appears in.
+
+	This directive is a special case: it is evaluated before the configuration
+	is parsed, and it can appear anywhere.
+
 # FILES
 
 _/etc/kimchi/config_

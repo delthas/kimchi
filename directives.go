@@ -7,10 +7,25 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"git.sr.ht/~emersion/go-scfg"
 )
+
+func loadConfig(srv *Server, filename string) error {
+	cfg, err := scfg.Load(filename)
+	if err != nil {
+		return err
+	}
+
+	cfg, err = resolveImports(cfg, filename)
+	if err != nil {
+		return err
+	}
+
+	return parseConfig(srv, cfg)
+}
 
 func parseConfig(srv *Server, cfg scfg.Block) error {
 	for _, dir := range cfg {
@@ -169,4 +184,57 @@ func parseMiddleware(dir *scfg.Directive, next http.Handler) (http.Handler, erro
 	default:
 		return nil, fmt.Errorf("unknown directive")
 	}
+}
+
+func resolveImports(input scfg.Block, filename string) (scfg.Block, error) {
+	dirname := filepath.Dir(filename)
+
+	output := make(scfg.Block, 0, len(input))
+	for _, dir := range input {
+		switch dir.Name {
+		case "import":
+			var pattern string
+			if err := dir.ParseParams(&pattern); err != nil {
+				return nil, err
+			}
+			if !filepath.IsAbs(pattern) {
+				pattern = filepath.Join(dirname, pattern)
+			}
+
+			matches, err := filepath.Glob(pattern)
+			if err != nil {
+				return nil, fmt.Errorf("failed to import %q: %v", pattern, err)
+			}
+
+			for _, filename := range matches {
+				block, err := scfg.Load(filename)
+				if err != nil {
+					return nil, err
+				}
+
+				block, err = resolveImports(block, filename)
+				if err != nil {
+					return nil, err
+				}
+
+				output = append(output, block...)
+			}
+		default:
+			if len(dir.Children) > 0 {
+				children, err := resolveImports(dir.Children, filename)
+				if err != nil {
+					return nil, err
+				}
+
+				dirCopy := *dir
+				dirCopy.Children = children
+				dir = &dirCopy
+			}
+
+			output = append(output, dir)
+			continue
+		}
+	}
+
+	return output, nil
 }
