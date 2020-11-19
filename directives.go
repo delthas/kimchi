@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -126,7 +127,11 @@ var backends = map[string]parseBackendFunc{
 		if err := dir.ParseParams(&dirname); err != nil {
 			return nil, err
 		}
-		return http.FileServer(http.Dir(dirname)), nil
+		var fs http.FileSystem = http.Dir(dirname)
+		if dir.Children.Get("browse") == nil {
+			fs = noBrowseFileSystem{fs}
+		}
+		return http.FileServer(fs), nil
 	},
 	"reverse_proxy": func(dir *scfg.Directive) (http.Handler, error) {
 		var urlStr string
@@ -249,4 +254,24 @@ func resolveImports(input scfg.Block, filename string) (scfg.Block, error) {
 	}
 
 	return output, nil
+}
+
+type noBrowseFileSystem struct {
+	http.FileSystem
+}
+
+func (fs noBrowseFileSystem) Open(name string) (http.File, error) {
+	f, err := fs.FileSystem.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return noBrowseFile{f}, nil
+}
+
+type noBrowseFile struct {
+	http.File
+}
+
+func (f noBrowseFile) Readdir(count int) ([]os.FileInfo, error) {
+	return nil, os.ErrPermission
 }

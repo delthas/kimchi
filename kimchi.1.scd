@@ -67,8 +67,13 @@ The following directives are supported:
 	*reverse_proxy* <uri>
 		Forward incoming requests to another HTTP server.
 
-	*file_server* <path>
+	*file_server* <path> { ++
+	*browse* ++
+}
 		Serve static files at the specified path.
+
+		_browse_ enables file listings for directories that do not have an
+		index file.
 
 	*header* <key> <value> ++
 *header* { ++
