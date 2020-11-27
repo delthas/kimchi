@@ -85,6 +85,9 @@ The following directives are supported:
 	*basic_auth* <username> <password>
 		Sets up HTTP basic authentication.
 
+	*redirect* <to>
+		Replies with an HTTP redirection.
+
 *import* <pattern>
 	Include external files.
 
