@@ -43,14 +43,15 @@ func parseConfig(srv *Server, cfg scfg.Block) error {
 }
 
 func parseSite(srv *Server, dir *scfg.Directive) error {
-	for _, uriStr := range dir.Params {
+	for _, site := range dir.Params {
+		uriStr := site
 		if !strings.Contains(uriStr, "//") {
 			uriStr = "//" + uriStr
 		}
 
 		u, err := url.Parse(uriStr)
 		if err != nil {
-			return err
+			return fmt.Errorf("site %q: %v", site, err)
 		}
 
 		var ln *Listener
@@ -66,7 +67,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 				ln.Insecure = true
 			}
 		default:
-			return fmt.Errorf("unknown URI scheme %q", u.Scheme)
+			return fmt.Errorf("site %q: unknown URI scheme %q", site, u.Scheme)
 		}
 
 		path := u.Path
@@ -74,7 +75,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 			path = "/"
 		}
 		if !strings.HasPrefix(path, "/") {
-			return fmt.Errorf("invalid path %q", path)
+			return fmt.Errorf("site %q: invalid path %q", site, path)
 		}
 
 		pattern := host + path
@@ -88,16 +89,16 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 			}
 
 			if backend != nil {
-				return fmt.Errorf("multiple HTTP handler directives provided")
+				return fmt.Errorf("site %q: multiple HTTP backend directives provided", site)
 			}
 
 			backend, err = f(child)
 			if err != nil {
-				return err
+				return fmt.Errorf("site %q: %v", site, err)
 			}
 		}
 		if backend == nil {
-			return fmt.Errorf("missing handler directive")
+			return fmt.Errorf("site %q: missing backend directive", site)
 		}
 
 		// Then process middleware directives
@@ -109,7 +110,7 @@ func parseSite(srv *Server, dir *scfg.Directive) error {
 			default:
 				handler, err = parseMiddleware(child, handler)
 				if err != nil {
-					return fmt.Errorf("directive %q: %v", child.Name, err)
+					return fmt.Errorf("site %q: directive %q: %v", site, child.Name, err)
 				}
 			}
 		}
