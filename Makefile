@@ -29,3 +29,5 @@ install: all
 	mkdir -p $(DESTDIR)$(SYSCONFDIR)/kimchi
 	cp -f kimchi $(DESTDIR)$(BINDIR)
 	cp -f kimchi.1 $(DESTDIR)$(MANDIR)/man1
+
+.PHONY: kimchi clean install
