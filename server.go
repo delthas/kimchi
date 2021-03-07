@@ -60,7 +60,7 @@ func (srv *Server) AddListener(network, addr string) *Listener {
 		return ln
 	}
 
-	ln := newListener(srv, network, addr)
+	ln := newListener(network, addr)
 	srv.listeners[k] = ln
 	return ln
 }
@@ -70,7 +70,6 @@ type Listener struct {
 	Address  string
 	Mux      *http.ServeMux
 	Insecure bool
-	Server   *Server
 
 	h1Server   *http.Server
 	h1Listener *pipeListener
@@ -78,11 +77,10 @@ type Listener struct {
 	h2Server *http2.Server
 }
 
-func newListener(srv *Server, network, addr string) *Listener {
+func newListener(network, addr string) *Listener {
 	ln := &Listener{
 		Network: network,
 		Address: addr,
-		Server:  srv,
 	}
 	ln.h1Listener = newPipeListener()
 	ln.h1Server = &http.Server{
