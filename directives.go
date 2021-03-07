@@ -146,8 +146,9 @@ var backends = map[string]parseBackendFunc{
 		proxy := httputil.NewSingleHostReverseProxy(target)
 		director := proxy.Director
 		proxy.Director = func(req *http.Request) {
+			forwarded := fmt.Sprintf("for=%q;host=%q;proto=%q", req.RemoteAddr, req.Host, req.URL.Scheme)
 			director(req)
-			req.Host = target.Host
+			req.Header.Set("Forwarded", forwarded)
 		}
 		return proxy, nil
 	},
