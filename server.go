@@ -134,11 +134,16 @@ func (ln *Listener) serve(netLn net.Listener) error {
 func (ln *Listener) serveConn(conn net.Conn) error {
 	var proto string
 	var tlsState *tls.ConnectionState
+	remoteAddr := conn.RemoteAddr()
 	// TODO: read proto and TLS state from conn, if it's a TLS connection
 
 	// TODO: only accept PROXY protocol from trusted sources
 	proxyConn := proxyproto.NewConn(conn)
 	if proxyHeader := proxyConn.ProxyHeader(); proxyHeader != nil {
+		if proxyHeader.SourceAddr != nil {
+			remoteAddr = proxyHeader.SourceAddr
+		}
+
 		tlvs, err := proxyHeader.TLVs()
 		if err != nil {
 			conn.Close()
@@ -156,9 +161,10 @@ func (ln *Listener) serveConn(conn net.Conn) error {
 	conn = proxyConn
 
 	conn = &Conn{
-		Conn:     conn,
-		proto:    proto,
-		tlsState: tlsState,
+		Conn:       conn,
+		proto:      proto,
+		tlsState:   tlsState,
+		remoteAddr: remoteAddr,
 	}
 
 	switch proto {
@@ -205,14 +211,19 @@ func parseSSLTLV(tlv proxyproto.TLV) *tls.ConnectionState {
 
 type Conn struct {
 	net.Conn
-	proto    string
-	tlsState *tls.ConnectionState
+	proto      string
+	tlsState   *tls.ConnectionState
+	remoteAddr net.Addr
 }
 
 func (c *Conn) Context(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, contextKeyProtocol, c.proto)
 	ctx = context.WithValue(ctx, contextKeyTLSState, c.tlsState)
 	return ctx
+}
+
+func (c *Conn) RemoteAddr() net.Addr {
+	return c.remoteAddr
 }
 
 var errPipeListenerClosed = fmt.Errorf("pipe listener closed")
