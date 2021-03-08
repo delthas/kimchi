@@ -67,6 +67,10 @@ The following directives are supported:
 	*reverse_proxy* <uri>
 		Forward incoming requests to another HTTP server.
 
+		The header fields are passed through, except _Host_ which is set to the
+		target URI's. The _Forwarded_ header is set with the original remote
+		IP address, port, host and protocol (see RFC 7239).
+
 	*file_server* <path> { ++
 	*browse* ++
 }
