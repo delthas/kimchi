@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"git.sr.ht/~emersion/go-scfg"
+	"github.com/klauspost/compress/zstd"
 )
 
 func loadConfig(srv *Server, filename string) error {
@@ -207,6 +208,15 @@ func parseMiddleware(dir *scfg.Directive, next http.Handler) (http.Handler, erro
 
 			next.ServeHTTP(w, r)
 		}), nil
+	case "encode":
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			encodings, err := unmarshalAcceptEncoding(r.Header)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// TODO
+		})
 	default:
 		return nil, fmt.Errorf("unknown directive")
 	}
